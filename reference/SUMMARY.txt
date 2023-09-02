@@ -1,0 +1,3 @@
+* [<code class="doc-symbol doc-symbol-nav doc-symbol-module"></code> docstrings2pep727](docstrings2pep727/index.md)
+    * [<code class="doc-symbol doc-symbol-nav doc-symbol-module"></code> cli](docstrings2pep727/cli.md)
+    * [<code class="doc-symbol doc-symbol-nav doc-symbol-module"></code> transformer](docstrings2pep727/transformer.md)
