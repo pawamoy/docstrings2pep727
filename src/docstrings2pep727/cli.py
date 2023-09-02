@@ -14,6 +14,27 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
+
+import libcst as cst
+from griffe.agents.visitor import visit
+from griffe.docstrings import Parser
+from griffe import Object, Docstring
+
+from docstrings2pep727.transformer import PEP727Transformer
+
+
+def _docstrings(obj: Object, store: dict | None = None) -> dict[str, Docstring]:
+    if store is None:
+        store = {}
+    if obj.docstring:
+        store[obj.path] = obj.docstring
+    for member in obj.members.values():
+        if not member.is_alias:
+            _docstrings(member, store)  # type: ignore[arg-type]
+    return store
+
+
 def get_parser() -> argparse.ArgumentParser:
     """Return the CLI argument parser.
 
@@ -21,6 +42,7 @@ def get_parser() -> argparse.ArgumentParser:
         An argparse parser.
     """
     parser = argparse.ArgumentParser(prog="docstrings2pep727")
+    parser.add_argument("module", help="Module to transform.")
     return parser
 
 
@@ -36,4 +58,15 @@ def main(args: list[str] | None = None) -> int:
         An exit code.
     """
     parser = get_parser()
+    opts = parser.parse_args(args=args)
+    
+    module_path = Path(opts.module)
+    module_code = module_path.read_text()
+    module_data = visit(module_path.stem, module_path, module_code, docstring_parser=Parser("google"))
+    docstrings = _docstrings(module_data)
+
+    source_tree = cst.parse_module(module_code)
+    transformer = PEP727Transformer(source_tree, module_path.stem, docstrings)
+    modified_tree = source_tree.visit(transformer)
+    print(modified_tree.code)
     return 0
