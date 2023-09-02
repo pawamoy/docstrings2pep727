@@ -1,0 +1,20 @@
+# Changes here will be overwritten by Copier
+_commit: 0.16.6
+_src_path: gh:pawamoy/copier-pdm
+author_email: pawamoy@pm.me
+author_fullname: Timothée Mazzucotelli
+author_username: pawamoy
+copyright_date: '2023'
+copyright_holder: Timothée Mazzucotelli
+copyright_holder_email: pawamoy@pm.me
+copyright_license: ISC License
+insiders: false
+project_description: Move documentation from docstrings to PEP 727 type annotations.
+project_name: docstrings2pep727
+python_package_command_line_name: docstrings2pep727
+python_package_distribution_name: docstrings2pep727
+python_package_import_name: docstrings2pep727
+repository_name: docstrings2pep727
+repository_namespace: pawamoy
+repository_provider: github.com
+
