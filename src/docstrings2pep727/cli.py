@@ -15,13 +15,16 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import libcst as cst
 from griffe.agents.visitor import visit
 from griffe.docstrings import Parser
-from griffe import Object, Docstring
 
 from docstrings2pep727.transformer import PEP727Transformer
+
+if TYPE_CHECKING:
+    from griffe import Docstring, Object
 
 
 def _docstrings(obj: Object, store: dict | None = None) -> dict[str, Docstring]:
@@ -59,7 +62,7 @@ def main(args: list[str] | None = None) -> int:
     """
     parser = get_parser()
     opts = parser.parse_args(args=args)
-    
+
     module_path = Path(opts.module)
     module_code = module_path.read_text()
     module_data = visit(module_path.stem, module_path, module_code, docstring_parser=Parser("google"))
