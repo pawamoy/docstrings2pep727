@@ -1,7 +1,9 @@
+"""The CST transformer module."""
+
 from __future__ import annotations
 
 from itertools import chain
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, Callable, Sequence
 
 import libcst as cst
 from griffe.enumerations import DocstringSectionKind
@@ -68,7 +70,7 @@ def _annotated(
     )
 
 
-def _update_slice(node, get_element, docstrings):
+def _update_slice(node: cst.CSTNode, get_element: Callable, docstrings: list[str]) -> cst.CSTNode:
     for index in range(len(docstrings)):
         element = get_element(node, index)
         item = docstrings[index]
@@ -92,33 +94,40 @@ def _matches_tuple(annotation: cst.CSTNode) -> bool:
 
 
 class PEP727Transformer(cst.CSTTransformer):
-    def __init__(self, cst_module: cst.Module, module_path: str, docstrings: dict[str, Docstring]) -> None:
+    """The CST transformer."""
+
+    def __init__(  # noqa: D107
+        self,
+        cst_module: cst.Module,
+        module_path: str,
+        docstrings: dict[str, Docstring],
+    ) -> None:
         self.cst_module: cst.Module = cst_module
         self.module_path: str = module_path
         self.docstrings: dict[str, Docstring] = docstrings
         self.stack: list[str] = [module_path]
 
     @property
-    def current_path(self) -> str:
+    def current_path(self) -> str:  # noqa: D102
         return ".".join(self.stack)
 
-    def visit_ClassDef(self, node: cst.ClassDef) -> bool | None:
+    def visit_ClassDef(self, node: cst.ClassDef) -> None:  # noqa: D102,N802
         self.stack.append(node.name.value)
 
-    def leave_ClassDef(
+    def leave_ClassDef(  # type: ignore[override]  # noqa: D102,N802
         self,
-        original_node: cst.ClassDef,
+        original_node: cst.ClassDef,  # noqa: ARG002
         updated_node: cst.ClassDef,
     ) -> cst.CSTNode:
         self.stack.pop()
         return updated_node
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool | None:
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:  # noqa: D102,N802
         self.stack.append(node.name.value)
 
-    def leave_FunctionDef(
+    def leave_FunctionDef(  # type: ignore[override]  # noqa: D102,N802
         self,
-        original_node: cst.FunctionDef,
+        original_node: cst.FunctionDef,  # noqa: ARG002
         updated_node: cst.FunctionDef,
     ) -> cst.CSTNode:
         current_path = self.current_path
@@ -126,14 +135,14 @@ class PEP727Transformer(cst.CSTTransformer):
 
         if current_path in self.docstrings:
             docstring = self.docstrings[current_path]
-            param_docstrings = []
+            param_docstrings = {}
             return_docstrings = []
             yield_docstrings = []
             receive_docstrings = []
             exception_docstrings = []
             warning_docstrings = []
 
-            for _section_index, section in enumerate(docstring.parsed):
+            for section in docstring.parsed:
                 if section.kind is DocstringSectionKind.parameters:
                     param_docstrings = {param.name: param.description for param in section.value}
                 elif section.kind is DocstringSectionKind.returns:
@@ -153,7 +162,7 @@ class PEP727Transformer(cst.CSTTransformer):
                     updated_node.params.params,
                     updated_node.params.kwonly_params,
                 ):
-                    if param.name.value in param_docstrings:
+                    if param.name.value in param_docstrings and param.annotation:
                         updated_node = updated_node.with_deep_changes(
                             param,
                             annotation=_annotated(
@@ -164,18 +173,18 @@ class PEP727Transformer(cst.CSTTransformer):
 
             if yield_docstrings:
                 returns = updated_node.returns
-                if _matches_generator(returns.annotation) or _matches_iterator(returns.annotation):
-                    if isinstance(returns.annotation.slice[0].slice.value, cst.Subscript):
-                        updated_node = _update_slice(
+                if _matches_generator(returns.annotation) or _matches_iterator(returns.annotation):  # type: ignore[union-attr]
+                    if isinstance(returns.annotation.slice[0].slice.value, cst.Subscript):  # type: ignore[union-attr]
+                        updated_node = _update_slice(  # type: ignore[assignment]
                             updated_node,
                             lambda node, index: node.returns.annotation.slice[0].slice.value.slice[index],
-                            yield_docstrings,
+                            yield_docstrings,  # type: ignore[arg-type]
                         )
                     else:
                         updated_node = updated_node.with_deep_changes(
-                            returns.annotation.slice[0].slice,
+                            returns.annotation.slice[0].slice,  # type: ignore[union-attr]
                             value=_annotated(
-                                returns.annotation.slice[0].slice.value,
+                                returns.annotation.slice[0].slice.value,  # type: ignore[union-attr]
                                 name=yield_docstrings[0][0],
                                 doc=yield_docstrings[0][1],
                             ).annotation,
@@ -183,18 +192,18 @@ class PEP727Transformer(cst.CSTTransformer):
 
             if receive_docstrings:
                 returns = updated_node.returns
-                if _matches_generator(returns.annotation):
-                    if isinstance(returns.annotation.slice[1].slice.value, cst.Subscript):
-                        updated_node = _update_slice(
+                if _matches_generator(returns.annotation):  # type: ignore[union-attr]
+                    if isinstance(returns.annotation.slice[1].slice.value, cst.Subscript):  # type: ignore[union-attr]
+                        updated_node = _update_slice(  # type: ignore[assignment]
                             updated_node,
                             lambda node, index: node.returns.annotation.slice[1].slice.value.slice[index],
-                            receive_docstrings,
+                            receive_docstrings,  # type: ignore[arg-type]
                         )
                     else:
                         updated_node = updated_node.with_deep_changes(
-                            returns.annotation.slice[1].slice,
+                            returns.annotation.slice[1].slice,  # type: ignore[union-attr]
                             value=_annotated(
-                                returns.annotation.slice[0].slice.value,
+                                returns.annotation.slice[0].slice.value,  # type: ignore[union-attr]
                                 name=receive_docstrings[0][0],
                                 doc=receive_docstrings[0][1],
                             ).annotation,
@@ -204,27 +213,27 @@ class PEP727Transformer(cst.CSTTransformer):
                 returns = updated_node.returns
                 kwargs = {}
                 if return_docstrings:
-                    if _matches_generator(returns.annotation):
-                        if isinstance(returns.annotation.slice[2].slice.value, cst.Subscript):
-                            updated_node = _update_slice(
+                    if _matches_generator(returns.annotation):  # type: ignore[union-attr]
+                        if isinstance(returns.annotation.slice[2].slice.value, cst.Subscript):  # type: ignore[union-attr]
+                            updated_node = _update_slice(  # type: ignore[assignment]
                                 updated_node,
                                 lambda node, index: node.returns.annotation.slice[2].slice.value.slice[index],
-                                return_docstrings,
+                                return_docstrings,  # type: ignore[arg-type]
                             )
                         else:
                             updated_node = updated_node.with_deep_changes(
-                                returns.annotation.slice[2].slice,
+                                returns.annotation.slice[2].slice,  # type: ignore[union-attr]
                                 value=_annotated(
-                                    returns.annotation.slice[0].slice.value,
+                                    returns.annotation.slice[0].slice.value,  # type: ignore[union-attr]
                                     name=return_docstrings[0][0],
                                     doc=return_docstrings[0][1],
                                 ).annotation,
                             )
-                    elif _matches_tuple(returns.annotation):
-                        updated_node = _update_slice(
+                    elif _matches_tuple(returns.annotation):  # type: ignore[union-attr]
+                        updated_node = _update_slice(  # type: ignore[assignment]
                             updated_node,
                             lambda node, index: node.returns.annotation.slice[index],
-                            return_docstrings,
+                            return_docstrings,  # type: ignore[arg-type]
                         )
                     else:
                         kwargs["name"] = return_docstrings[0][0]
@@ -233,7 +242,7 @@ class PEP727Transformer(cst.CSTTransformer):
                 if exception_docstrings or warning_docstrings or kwargs:
                     updated_node = updated_node.with_changes(
                         returns=_annotated(
-                            returns.annotation,
+                            returns.annotation,  # type: ignore[union-attr]
                             raises=exception_docstrings,
                             warns=warning_docstrings,
                             **kwargs,
@@ -242,19 +251,27 @@ class PEP727Transformer(cst.CSTTransformer):
 
         return updated_node
 
-    def visit_Assign(self, node: cst.Assign) -> bool | None:
+    def visit_Assign(self, node: cst.Assign) -> None:  # noqa: D102,N802
         if len(node.targets) > 1:
-            return None
-        self.stack.append(node.targets[0])
+            return
+        self.stack.append(node.targets[0])  # type: ignore[arg-type]
 
-    def leave_Assign(self, original_node: cst.Assign, updated_node: cst.Assign) -> cst.CSTNode:
+    def leave_Assign(  # type: ignore[override]  # noqa: D102,N802
+        self,
+        original_node: cst.Assign,  # noqa: ARG002
+        updated_node: cst.Assign,
+    ) -> cst.CSTNode:
         self.stack.pop()
         return updated_node
 
-    def visit_AnnAssign(self, node: cst.AnnAssign) -> bool | None:
-        self.stack.append(node.target.value)
+    def visit_AnnAssign(self, node: cst.AnnAssign) -> None:  # noqa: D102,N802
+        self.stack.append(node.target.value)  # type: ignore[attr-defined]
 
-    def leave_AnnAssign(self, original_node: cst.AnnAssign, updated_node: cst.AnnAssign) -> cst.CSTNode:
+    def leave_AnnAssign(  # type: ignore[override]  # noqa: D102,N802
+        self,
+        original_node: cst.AnnAssign,  # noqa: ARG002
+        updated_node: cst.AnnAssign,
+    ) -> cst.CSTNode:
         current_path = self.current_path
         self.stack.pop()
         if current_path in self.docstrings:

@@ -9,7 +9,8 @@ from docstrings2pep727 import cli, debug
 
 def test_main() -> None:
     """Basic CLI test."""
-    assert cli.main([]) == 0
+    with pytest.raises(SystemExit):
+        cli.main([])
 
 
 def test_show_help(capsys: pytest.CaptureFixture) -> None:
