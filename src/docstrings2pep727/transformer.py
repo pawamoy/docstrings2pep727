@@ -149,7 +149,9 @@ class PEP727Transformer(cst.CSTTransformer):
 
             if param_docstrings:
                 for param in chain(
-                    updated_node.params.posonly_params, updated_node.params.params, updated_node.params.kwonly_params
+                    updated_node.params.posonly_params,
+                    updated_node.params.params,
+                    updated_node.params.kwonly_params,
                 ):
                     if param.name.value in param_docstrings:
                         updated_node = updated_node.with_deep_changes(

@@ -11,11 +11,13 @@ Move documentation from docstrings to PEP 727 type annotations.
 ## Installation
 
 With `pip`:
+
 ```bash
 pip install docstrings2pep727
 ```
 
 With [`pipx`](https://github.com/pipxproject/pipx):
+
 ```bash
 python3.8 -m pip install --user pipx
 pipx install docstrings2pep727

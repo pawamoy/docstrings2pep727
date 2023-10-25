@@ -14,8 +14,9 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import libcst as cst
 from griffe.agents.visitor import visit
@@ -25,6 +26,18 @@ from docstrings2pep727.transformer import PEP727Transformer
 
 if TYPE_CHECKING:
     from griffe import Docstring, Object
+
+
+from docstrings2pep727 import debug
+
+
+class _DebugInfo(argparse.Action):
+    def __init__(self, nargs: int | str | None = 0, **kwargs: Any) -> None:
+        super().__init__(nargs=nargs, **kwargs)
+
+    def __call__(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
+        debug.print_debug_info()
+        sys.exit(0)
 
 
 def _docstrings(obj: Object, store: dict | None = None) -> dict[str, Docstring]:
@@ -46,6 +59,8 @@ def get_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(prog="docstrings2pep727")
     parser.add_argument("module", help="Module to transform.")
+    parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {debug.get_version()}")
+    parser.add_argument("--debug-info", action=_DebugInfo, help="Print debug information.")
     return parser
 
 
