@@ -4,7 +4,7 @@
 [![documentation](https://img.shields.io/badge/docs-mkdocs%20material-blue.svg?style=flat)](https://pawamoy.github.io/docstrings2pep727/)
 [![pypi version](https://img.shields.io/pypi/v/docstrings2pep727.svg)](https://pypi.org/project/docstrings2pep727/)
 [![gitpod](https://img.shields.io/badge/gitpod-workspace-blue.svg?style=flat)](https://gitpod.io/#https://github.com/pawamoy/docstrings2pep727)
-[![gitter](https://badges.gitter.im/join%20chat.svg)](https://gitter.im/docstrings2pep727/community)
+[![gitter](https://badges.gitter.im/join%20chat.svg)](https://app.gitter.im/#/room/#docstrings2pep727:gitter.im)
 
 Move documentation from docstrings to PEP 727 type annotations.
 
