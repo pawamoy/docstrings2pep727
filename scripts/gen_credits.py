@@ -30,6 +30,7 @@ from textwrap import dedent
 
 from jinja2 import StrictUndefined
 from jinja2.sandbox import SandboxedEnvironment
+from packaging.markers import Value, Variable
 from packaging.requirements import Requirement
 
 # YORE: EOL 3.10: Replace block with line 2.
@@ -71,7 +72,14 @@ def _extra_marker(req: Requirement) -> str | None:
     if not req.marker:
         return None
     try:
-        return next(marker[2].value for marker in req.marker._markers if getattr(marker[0], "value", None) == "extra")
+        return next(
+            marker[2].value
+            for marker in req.marker._markers
+            if isinstance(marker, tuple)
+            and isinstance(marker[0], Variable)
+            and marker[0].value == "extra"
+            and isinstance(marker[2], Value)
+        )
     except StopIteration:
         return None
 

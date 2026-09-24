@@ -1,16 +1,34 @@
-"""The CST transformer module."""
+# SPDX-License-Identifier: ISC
+#
+# ISC License
+#
+# Copyright (c) 2023, Timothée Mazzucotelli and contributors
+#
+# Permission to use, copy, modify, and/or distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+# The CST transformer module.
 
 from __future__ import annotations
 
 from itertools import chain
-from typing import TYPE_CHECKING, Callable, Sequence
+from typing import TYPE_CHECKING, TypeGuard
 
 import libcst as cst
-from griffe.enumerations import DocstringSectionKind
+from griffe import Docstring, DocstringSectionKind
 from libcst import matchers
 
 if TYPE_CHECKING:
-    from griffe import Docstring
+    from collections.abc import Sequence
 
 
 def _metadata_node(name: str, *args: cst.BaseExpression) -> cst.SubscriptElement:
@@ -33,11 +51,11 @@ def _name_node(value: str) -> cst.SubscriptElement:
 
 
 def _raises_node(exception: str, description: str) -> cst.SubscriptElement:
-    return _metadata_node("Raises", cst.Name(exception), cst.SimpleString(value=repr(description)))
+    return _metadata_node("Raises", cst.parse_expression(exception), cst.SimpleString(value=repr(description)))
 
 
 def _warns_node(warning: str, description: str) -> cst.SubscriptElement:
-    return _metadata_node("Warns", cst.Name(warning), cst.SimpleString(value=repr(description)))
+    return _metadata_node("Warns", cst.parse_expression(warning), cst.SimpleString(value=repr(description)))
 
 
 def _annotated(
@@ -45,8 +63,8 @@ def _annotated(
     *,
     doc: str | None = None,
     name: str | None = None,
-    raises: Sequence[tuple[type, str]] | None = None,
-    warns: Sequence[tuple[type, str]] | None = None,
+    raises: Sequence[tuple[str, str]] | None = None,
+    warns: Sequence[tuple[str, str]] | None = None,
 ) -> cst.Annotation:
     slice_elements: list[cst.SubscriptElement] = []
     if name:
@@ -70,33 +88,65 @@ def _annotated(
     )
 
 
-def _update_slice(node: cst.CSTNode, get_element: Callable, docstrings: list[str]) -> cst.CSTNode:
-    for index in range(len(docstrings)):
-        element = get_element(node, index)
-        item = docstrings[index]
-        node = node.with_deep_changes(
-            element.slice,
-            value=_annotated(element.slice.value, name=item[0], doc=item[1]).annotation,
-        )
-    return node
+def _update_slice(node: cst.Subscript, docstrings: list[tuple[str | None, str]]) -> cst.Subscript:
+    elements = list(node.slice)
+    for index, (name, doc) in enumerate(docstrings):
+        if index >= len(elements):
+            break
+        element = elements[index]
+        if isinstance(element.slice, cst.Index):
+            elements[index] = element.with_changes(
+                slice=element.slice.with_changes(value=_annotated(element.slice.value, name=name, doc=doc).annotation),
+            )
+    return node.with_changes(slice=elements)
 
 
-def _matches_generator(annotation: cst.CSTNode) -> bool:
-    return matchers.matches(annotation, matchers.Subscript(value=matchers.Name("Generator")))
+def _matches_generator(annotation: cst.BaseExpression) -> TypeGuard[cst.Subscript]:
+    return isinstance(annotation, cst.Subscript) and matchers.matches(
+        annotation,
+        matchers.Subscript(value=matchers.Name("Generator")),
+    )
 
 
-def _matches_iterator(annotation: cst.CSTNode) -> bool:
-    return matchers.matches(annotation, matchers.Subscript(value=matchers.Name("Iterator")))
+def _matches_iterator(annotation: cst.BaseExpression) -> TypeGuard[cst.Subscript]:
+    return isinstance(annotation, cst.Subscript) and matchers.matches(
+        annotation,
+        matchers.Subscript(value=matchers.Name("Iterator")),
+    )
 
 
-def _matches_tuple(annotation: cst.CSTNode) -> bool:
-    return matchers.matches(annotation, matchers.Subscript(value=matchers.Name("tuple") | matchers.Name("Tuple")))
+def _matches_tuple(annotation: cst.BaseExpression) -> TypeGuard[cst.Subscript]:
+    return isinstance(annotation, cst.Subscript) and matchers.matches(
+        annotation,
+        matchers.Subscript(value=matchers.Name("tuple") | matchers.Name("Tuple")),
+    )
 
 
-class PEP727Transformer(cst.CSTTransformer):
+def _annotate_component(
+    annotation: cst.Subscript,
+    index: int,
+    docstrings: list[tuple[str | None, str]],
+) -> cst.Subscript:
+    if index >= len(annotation.slice):
+        return annotation
+    elements = list(annotation.slice)
+    element = elements[index]
+    if not isinstance(element.slice, cst.Index):
+        return annotation
+    value = element.slice.value
+    if isinstance(value, cst.Subscript):
+        value = _update_slice(value, docstrings)
+    else:
+        name, doc = docstrings[0]
+        value = _annotated(value, name=name, doc=doc).annotation
+    elements[index] = element.with_changes(slice=element.slice.with_changes(value=value))
+    return annotation.with_changes(slice=elements)
+
+
+class _PEP727Transformer(cst.CSTTransformer):
     """The CST transformer."""
 
-    def __init__(  # noqa: D107
+    def __init__(
         self,
         cst_module: cst.Module,
         module_path: str,
@@ -108,28 +158,28 @@ class PEP727Transformer(cst.CSTTransformer):
         self.stack: list[str] = [module_path]
 
     @property
-    def current_path(self) -> str:  # noqa: D102
+    def current_path(self) -> str:
         return ".".join(self.stack)
 
-    def visit_ClassDef(self, node: cst.ClassDef) -> None:  # noqa: D102,N802
+    def visit_ClassDef(self, node: cst.ClassDef) -> None:  # noqa: N802
         self.stack.append(node.name.value)
 
-    def leave_ClassDef(  # type: ignore[override]  # noqa: D102,N802
+    def leave_ClassDef(  # noqa: N802
         self,
         original_node: cst.ClassDef,  # noqa: ARG002
         updated_node: cst.ClassDef,
-    ) -> cst.CSTNode:
+    ) -> cst.ClassDef:
         self.stack.pop()
         return updated_node
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:  # noqa: D102,N802
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:  # noqa: N802
         self.stack.append(node.name.value)
 
-    def leave_FunctionDef(  # type: ignore[override]  # noqa: D102,N802
+    def leave_FunctionDef(  # noqa: N802
         self,
         original_node: cst.FunctionDef,  # noqa: ARG002
         updated_node: cst.FunctionDef,
-    ) -> cst.CSTNode:
+    ) -> cst.FunctionDef:
         current_path = self.current_path
         self.stack.pop()
 
@@ -152,9 +202,15 @@ class PEP727Transformer(cst.CSTTransformer):
                 elif section.kind is DocstringSectionKind.receives:
                     receive_docstrings = [(received.name, received.description) for received in section.value]
                 elif section.kind is DocstringSectionKind.raises:
-                    exception_docstrings = [(exc.annotation.canonical_name, exc.description) for exc in section.value]
+                    exception_docstrings = [
+                        (str(exc.annotation), exc.description) for exc in section.value if exc.annotation is not None
+                    ]
                 elif section.kind is DocstringSectionKind.warns:
-                    warning_docstrings = [(warning.annotation, warning.description) for warning in section.value]
+                    warning_docstrings = [
+                        (str(warning.annotation), warning.description)
+                        for warning in section.value
+                        if warning.annotation is not None
+                    ]
 
             if param_docstrings:
                 for param in chain(
@@ -171,107 +227,62 @@ class PEP727Transformer(cst.CSTTransformer):
                             ),
                         )
 
-            if yield_docstrings:
-                returns = updated_node.returns
-                if _matches_generator(returns.annotation) or _matches_iterator(returns.annotation):  # type: ignore[union-attr]
-                    if isinstance(returns.annotation.slice[0].slice.value, cst.Subscript):  # type: ignore[union-attr]
-                        updated_node = _update_slice(  # type: ignore[assignment]
-                            updated_node,
-                            lambda node, index: node.returns.annotation.slice[0].slice.value.slice[index],
-                            yield_docstrings,  # type: ignore[arg-type]
-                        )
-                    else:
-                        updated_node = updated_node.with_deep_changes(
-                            returns.annotation.slice[0].slice,  # type: ignore[union-attr]
-                            value=_annotated(
-                                returns.annotation.slice[0].slice.value,  # type: ignore[union-attr]
-                                name=yield_docstrings[0][0],
-                                doc=yield_docstrings[0][1],
-                            ).annotation,
-                        )
+            returns = updated_node.returns
+            if returns is not None:
+                annotation = returns.annotation
+                if yield_docstrings and (_matches_generator(annotation) or _matches_iterator(annotation)):
+                    annotation = _annotate_component(annotation, 0, yield_docstrings)
 
-            if receive_docstrings:
-                returns = updated_node.returns
-                if _matches_generator(returns.annotation):  # type: ignore[union-attr]
-                    if isinstance(returns.annotation.slice[1].slice.value, cst.Subscript):  # type: ignore[union-attr]
-                        updated_node = _update_slice(  # type: ignore[assignment]
-                            updated_node,
-                            lambda node, index: node.returns.annotation.slice[1].slice.value.slice[index],
-                            receive_docstrings,  # type: ignore[arg-type]
-                        )
-                    else:
-                        updated_node = updated_node.with_deep_changes(
-                            returns.annotation.slice[1].slice,  # type: ignore[union-attr]
-                            value=_annotated(
-                                returns.annotation.slice[0].slice.value,  # type: ignore[union-attr]
-                                name=receive_docstrings[0][0],
-                                doc=receive_docstrings[0][1],
-                            ).annotation,
-                        )
+                if receive_docstrings and _matches_generator(annotation):
+                    annotation = _annotate_component(annotation, 1, receive_docstrings)
 
-            if return_docstrings or exception_docstrings or warning_docstrings:
-                returns = updated_node.returns
-                kwargs = {}
+                return_name = None
+                return_doc = None
                 if return_docstrings:
-                    if _matches_generator(returns.annotation):  # type: ignore[union-attr]
-                        if isinstance(returns.annotation.slice[2].slice.value, cst.Subscript):  # type: ignore[union-attr]
-                            updated_node = _update_slice(  # type: ignore[assignment]
-                                updated_node,
-                                lambda node, index: node.returns.annotation.slice[2].slice.value.slice[index],
-                                return_docstrings,  # type: ignore[arg-type]
-                            )
-                        else:
-                            updated_node = updated_node.with_deep_changes(
-                                returns.annotation.slice[2].slice,  # type: ignore[union-attr]
-                                value=_annotated(
-                                    returns.annotation.slice[0].slice.value,  # type: ignore[union-attr]
-                                    name=return_docstrings[0][0],
-                                    doc=return_docstrings[0][1],
-                                ).annotation,
-                            )
-                    elif _matches_tuple(returns.annotation):  # type: ignore[union-attr]
-                        updated_node = _update_slice(  # type: ignore[assignment]
-                            updated_node,
-                            lambda node, index: node.returns.annotation.slice[index],
-                            return_docstrings,  # type: ignore[arg-type]
-                        )
+                    if _matches_generator(annotation):
+                        annotation = _annotate_component(annotation, 2, return_docstrings)
+                    elif _matches_tuple(annotation):
+                        annotation = _update_slice(annotation, return_docstrings)
                     else:
-                        kwargs["name"] = return_docstrings[0][0]
-                        kwargs["doc"] = return_docstrings[0][1]
+                        return_name, return_doc = return_docstrings[0]
 
-                if exception_docstrings or warning_docstrings or kwargs:
-                    updated_node = updated_node.with_changes(
-                        returns=_annotated(
-                            returns.annotation,  # type: ignore[union-attr]
-                            raises=exception_docstrings,
-                            warns=warning_docstrings,
-                            **kwargs,
-                        ),
-                    )
+                if return_name or return_doc or exception_docstrings or warning_docstrings:
+                    annotation = _annotated(
+                        annotation,
+                        name=return_name,
+                        doc=return_doc,
+                        raises=exception_docstrings,
+                        warns=warning_docstrings,
+                    ).annotation
+
+                updated_node = updated_node.with_changes(returns=returns.with_changes(annotation=annotation))
 
         return updated_node
 
-    def visit_Assign(self, node: cst.Assign) -> None:  # noqa: D102,N802
-        if len(node.targets) > 1:
-            return
-        self.stack.append(node.targets[0])  # type: ignore[arg-type]
+    def visit_Assign(self, node: cst.Assign) -> None:  # noqa: N802
+        if len(node.targets) == 1 and isinstance(node.targets[0].target, cst.Name):
+            self.stack.append(node.targets[0].target.value)
 
-    def leave_Assign(  # type: ignore[override]  # noqa: D102,N802
+    def leave_Assign(  # noqa: N802
         self,
-        original_node: cst.Assign,  # noqa: ARG002
+        original_node: cst.Assign,
         updated_node: cst.Assign,
-    ) -> cst.CSTNode:
-        self.stack.pop()
+    ) -> cst.Assign:
+        if len(original_node.targets) == 1 and isinstance(original_node.targets[0].target, cst.Name):
+            self.stack.pop()
         return updated_node
 
-    def visit_AnnAssign(self, node: cst.AnnAssign) -> None:  # noqa: D102,N802
-        self.stack.append(node.target.value)  # type: ignore[attr-defined]
+    def visit_AnnAssign(self, node: cst.AnnAssign) -> None:  # noqa: N802
+        if isinstance(node.target, cst.Name):
+            self.stack.append(node.target.value)
 
-    def leave_AnnAssign(  # type: ignore[override]  # noqa: D102,N802
+    def leave_AnnAssign(  # noqa: N802
         self,
-        original_node: cst.AnnAssign,  # noqa: ARG002
+        original_node: cst.AnnAssign,
         updated_node: cst.AnnAssign,
-    ) -> cst.CSTNode:
+    ) -> cst.AnnAssign:
+        if not isinstance(original_node.target, cst.Name):
+            return updated_node
         current_path = self.current_path
         self.stack.pop()
         if current_path in self.docstrings:
