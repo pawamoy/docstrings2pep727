@@ -15,14 +15,3 @@
 # WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
-"""docstrings2pep727 package.
-
-Move documentation from docstrings to PEP 727 type annotations.
-"""
-
-from __future__ import annotations
-
-from docstrings2pep727._internal.cli import get_parser, main
-
-__all__: list[str] = ["get_parser", "main"]

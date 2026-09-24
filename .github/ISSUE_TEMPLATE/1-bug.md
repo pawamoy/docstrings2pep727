@@ -53,7 +53,7 @@ PASTE TRACEBACK HERE
 docstrings2pep727 --debug-info  # | xclip -selection clipboard
 ```
 
-PASTE OUTPUT HERE
+PASTE MARKDOWN OUTPUT HERE
 
 ### Additional context
 <!-- Add any other relevant context about the problem here,
