@@ -30,10 +30,18 @@
 from __future__ import annotations
 
 import argparse
+import difflib
+import io
+import os
 import sys
+import tokenize
+from pathlib import Path
 from typing import Any
 
+import libcst as cst
+
 from docstrings2pep727._internal import debug
+from docstrings2pep727._internal.transformer import _transform_source
 
 
 class _DebugInfo(argparse.Action):
@@ -51,10 +59,58 @@ def get_parser() -> argparse.ArgumentParser:
     Returns:
         An argparse parser.
     """
-    parser = argparse.ArgumentParser(prog="docstrings2pep727")
+    parser = argparse.ArgumentParser(
+        prog="docstrings2pep727",
+        description="Move docstring sections into Annotated type metadata.",
+    )
     parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {debug._get_version()}")
     parser.add_argument("--debug-info", action=_DebugInfo, help="Print debug information.")
+    subparsers = parser.add_subparsers(dest="command", required=True, title="subcommands")
+    for command, description in (
+        ("check", "Report files that would change without writing them. Exit with status 1 if changes are needed."),
+        ("diff", "Print a unified diff without writing files."),
+        ("format", "Transform Python files in place."),
+    ):
+        subparser = subparsers.add_parser(command, help=description, description=description)
+        subparser.add_argument("paths", nargs="+", type=Path, metavar="PATH", help="Python files or directories to process.")
+        subparser.add_argument(
+            "--style",
+            choices=("auto", "google", "numpy", "sphinx"),
+            default="auto",
+            help="Docstring style (default: auto).",
+        )
     return parser
+
+
+def _python_files(paths: list[Path]) -> list[Path]:
+    files: dict[Path, Path] = {}
+    excluded = {"__pycache__", "build", "dist", "node_modules", "site-packages", "venv"}
+
+    def raise_walk_error(error: OSError) -> None:
+        raise error
+
+    for path in paths:
+        if path.is_file() and path.suffix == ".py":
+            files[path.resolve()] = path
+        elif path.is_dir():
+            for root, directories, names in os.walk(path, onerror=raise_walk_error):
+                directories[:] = sorted(
+                    name for name in directories if not name.startswith(".") and name not in excluded
+                )
+                for name in sorted(names):
+                    if name.endswith(".py"):
+                        file = Path(root) / name
+                        if not file.is_symlink():
+                            files[file.resolve()] = file
+        else:
+            raise ValueError(f"{path}: expected a Python file or directory")
+    return sorted(files.values(), key=str)
+
+
+def _read_source(path: Path) -> tuple[str, str]:
+    data = path.read_bytes()
+    encoding, _ = tokenize.detect_encoding(io.BytesIO(data).readline)
+    return data.decode(encoding), encoding
 
 
 def main(args: list[str] | None = None) -> int:
@@ -70,5 +126,41 @@ def main(args: list[str] | None = None) -> int:
     """
     parser = get_parser()
     opts = parser.parse_args(args=args)
-    print(opts)
-    return 0
+    try:
+        files = _python_files(opts.paths)
+    except (OSError, ValueError) as error:
+        print(f"docstrings2pep727: {error}", file=sys.stderr)
+        return 2
+
+    changed = False
+    failed = False
+    for path in files:
+        try:
+            source, encoding = _read_source(path)
+            transformed = _transform_source(source, style=opts.style)
+            if transformed == source:
+                continue
+            changed = True
+            if opts.command == "diff":
+                print(
+                    "".join(
+                        difflib.unified_diff(
+                            source.splitlines(keepends=True),
+                            transformed.splitlines(keepends=True),
+                            fromfile=str(path),
+                            tofile=str(path),
+                        ),
+                    ),
+                    end="",
+                )
+            elif opts.command == "check":
+                print(f"Would transform {path}")
+            else:
+                path.write_bytes(transformed.encode(encoding))
+                print(f"Transformed {path}")
+        except (OSError, UnicodeError, SyntaxError, ValueError, cst.ParserSyntaxError) as error:
+            print(f"docstrings2pep727: {path}: {error}", file=sys.stderr)
+            failed = True
+    if failed:
+        return 2
+    return 1 if changed and opts.command == "check" else 0

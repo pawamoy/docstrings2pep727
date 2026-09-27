@@ -30,7 +30,8 @@ classifiers = [
 ]
 dependencies = [
     "libcst>=1.0.1",
-    "griffe>=0.35.2",
+    "griffe>=2.0",
+    "typing-extensions>=4.8",
 ]
 
 [project.urls]

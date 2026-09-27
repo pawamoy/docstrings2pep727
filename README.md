@@ -19,6 +19,51 @@ With [`uv`](https://docs.astral.sh/uv/):
 uv tool install docstrings2pep727
 ```
 
+
+## Usage
+
+
+Add `typing-extensions>=4.8` to the project that runs the transformed code. The output imports `Doc` from `typing_extensions`.
+
+
+Preview changes before editing files:
+
+
+```bash
+docstrings2pep727 diff src/
+```
+
+
+Rewrite one or more Python files or directories:
+
+
+```bash
+docstrings2pep727 format src/ tests/
+```
+
+
+Use `check` in CI. It leaves files unchanged and exits with status 1 if changes are needed.
+
+
+```bash
+docstrings2pep727 check src/
+```
+
+
+Each subcommand detects Google, NumPy, and Sphinx docstrings. To choose a style, add `--style google`, `--style numpy`, or `--style sphinx` after the subcommand.
+
+
+```bash
+docstrings2pep727 format --style google src/
+```
+
+
+The transformation moves descriptions for annotated parameters, returns, yields, receives, and attributes into `Annotated[..., Doc(...)]`.
+
+
+It keeps prose and unsupported sections, such as `Raises`, in docstrings. It keeps a section if any item cannot be moved.
+
+
 ## Sponsors
 
 <!-- sponsors-start -->

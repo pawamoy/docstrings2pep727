@@ -35,13 +35,14 @@ ignore = [
 "src/**/cli.py" = [
     "T201",  # Print statement
 ]
-"src/*/debug.py" = [
+"src/**/debug.py" = [
     "T201",  # Print statement
 ]
-"!src/*/*.py" = [
-    "D100",  # Missing docstring in public module
+"src/**/transformer.py" = [
+    "N802",  # LibCST methods casing
 ]
 "!src/**.py" = [
+    "D100",  # Missing docstring in public module
     "D101",  # Missing docstring in public class
     "D103",  # Missing docstring in public function
 ]
