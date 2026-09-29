@@ -72,14 +72,7 @@ def _extra_marker(req: Requirement) -> str | None:
     if not req.marker:
         return None
     try:
-        return next(
-            marker[2].value
-            for marker in req.marker._markers
-            if isinstance(marker, tuple)
-            and isinstance(marker[0], Variable)
-            and marker[0].value == "extra"
-            and isinstance(marker[2], Value)
-        )
+        return next(marker[2].value for marker in req.marker._markers if getattr(marker[0], "value", None) == "extra")  # ty:ignore[unresolved-attribute]
     except StopIteration:
         return None
 
