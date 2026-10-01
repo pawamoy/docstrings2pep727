@@ -72,7 +72,13 @@ def get_parser() -> argparse.ArgumentParser:
         ("format", "Transform Python files in place."),
     ):
         subparser = subparsers.add_parser(command, help=description, description=description)
-        subparser.add_argument("paths", nargs="+", type=Path, metavar="PATH", help="Python files or directories to process.")
+        subparser.add_argument(
+            "paths",
+            nargs="+",
+            type=Path,
+            metavar="PATH",
+            help="Python files or directories to process.",
+        )
         subparser.add_argument(
             "--style",
             choices=("auto", "google", "numpy", "sphinx"),
