@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 <!-- insertion marker -->
+## [0.3.0](https://github.com/pawamoy/docstrings2pep727/releases/tag/0.3.0) - 2026-10-06
+
+<small>[Compare with 0.2.0](https://github.com/pawamoy/docstrings2pep727/compare/0.2.0...0.3.0)</small>
+
+### Build
+
+- Drop support for Python 3.10 ([d93af0d](https://github.com/pawamoy/docstrings2pep727/commit/d93af0d8656141777f8ccb4cfc3745d3749d864e) by Timothée Mazzucotelli).
+
+### Features
+
+- Implement CLI commands ([ac35647](https://github.com/pawamoy/docstrings2pep727/commit/ac3564797bfcc523407b43a0d2e411c67e02a521) by Timothée Mazzucotelli).
+
 ## [0.2.0](https://github.com/pawamoy/docstrings2pep727/releases/tag/0.2.0) - 2023-10-25
 
 <small>[Compare with 0.1.0](https://github.com/pawamoy/docstrings2pep727/compare/0.1.0...0.2.0)</small>
